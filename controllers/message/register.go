@@ -3,7 +3,7 @@ package message
 import (
 	"time"
 
-	"github.com/dakasa-co/yggdrasil-integration-template/internal/adapter"
+	"github.com/dakasa-yggdrasil/integration-template/internal/adapter"
 	amqp "github.com/rabbitmq/amqp091-go"
 	"go.uber.org/zap"
 )

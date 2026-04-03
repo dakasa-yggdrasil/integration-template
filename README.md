@@ -1,6 +1,6 @@
-# yggdrasil-integration-template
+# integration-template
 
-`yggdrasil-integration-template` is the base repository for new Yggdrasil plugins. It already comes with the RabbitMQ RPC worker shape, the `describe/execute` contract expected by `yggdrasil-core`, a minimal installation blueprint, tests, and example manifests.
+`integration-template` is the base repository for new Yggdrasil plugins. It already comes with the RabbitMQ RPC worker shape, the `describe/execute` contract expected by `yggdrasil-core`, a minimal installation blueprint, tests, and example manifests.
 
 The repository is intentionally generic. It is not meant to be used as-is in production. The first step after copying it is to rename the module, provider, queue names, blueprint semantics, and examples to match the new integration.
 
@@ -82,11 +82,11 @@ Replace them when the plugin is really a runtime/operation plugin. In that case:
 
 ## Repository shape
 
-- [/Users/dakasa/projects/yggdrasil-integration-template/main.go](/Users/dakasa/projects/yggdrasil-integration-template/main.go): worker bootstrap
-- [/Users/dakasa/projects/yggdrasil-integration-template/controllers/message](/Users/dakasa/projects/yggdrasil-integration-template/controllers/message): RabbitMQ RPC handlers
-- [/Users/dakasa/projects/yggdrasil-integration-template/internal/adapter/spec.go](/Users/dakasa/projects/yggdrasil-integration-template/internal/adapter/spec.go): adapter contract and starter blueprint
-- [/Users/dakasa/projects/yggdrasil-integration-template/internal/adapter/spec_test.go](/Users/dakasa/projects/yggdrasil-integration-template/internal/adapter/spec_test.go): contract tests
-- [/Users/dakasa/projects/yggdrasil-integration-template/examples](/Users/dakasa/projects/yggdrasil-integration-template/examples): example manifests for the core
+- [/Users/dakasa/projects/integration-template/main.go](/Users/dakasa/projects/integration-template/main.go): worker bootstrap
+- [/Users/dakasa/projects/integration-template/controllers/message](/Users/dakasa/projects/integration-template/controllers/message): RabbitMQ RPC handlers
+- [/Users/dakasa/projects/integration-template/internal/adapter/spec.go](/Users/dakasa/projects/integration-template/internal/adapter/spec.go): adapter contract and starter blueprint
+- [/Users/dakasa/projects/integration-template/internal/adapter/spec_test.go](/Users/dakasa/projects/integration-template/internal/adapter/spec_test.go): contract tests
+- [/Users/dakasa/projects/integration-template/examples](/Users/dakasa/projects/integration-template/examples): example manifests for the core
 
 ## Rename checklist
 

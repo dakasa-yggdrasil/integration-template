@@ -4,7 +4,7 @@
   "metadata": {
     "name": "template",
     "namespace": "global",
-    "description": "Example integration type generated from yggdrasil-integration-template.",
+    "description": "Example integration type generated from integration-template.",
     "labels": {
       "yggdrasil.io/catalog-domain": "template",
       "yggdrasil.io/catalog-section": "installations",

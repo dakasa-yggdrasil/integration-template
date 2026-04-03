@@ -3,7 +3,7 @@ package adapter
 import (
 	"testing"
 
-	"github.com/dakasa-co/yggdrasil-integration-template/internal/protocol"
+	"github.com/dakasa-yggdrasil/integration-template/internal/protocol"
 )
 
 func TestDescribe(t *testing.T) {

@@ -19,7 +19,7 @@ tasks:
 
   build:image:
     cmds:
-      - docker build -t yggdrasil-integration-template:local .
+      - docker build -t integration-template:local .
 
   up:
     deps: [env:init]

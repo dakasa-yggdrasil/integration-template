@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/dakasa-co/yggdrasil-integration-template/internal/adapter"
-	"github.com/dakasa-co/yggdrasil-integration-template/internal/protocol"
+	"github.com/dakasa-yggdrasil/integration-template/internal/adapter"
+	"github.com/dakasa-yggdrasil/integration-template/internal/protocol"
 	amqp "github.com/rabbitmq/amqp091-go"
 	"go.uber.org/zap"
 )

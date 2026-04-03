@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/dakasa-co/yggdrasil-integration-template/internal/protocol"
+	"github.com/dakasa-yggdrasil/integration-template/internal/protocol"
 )
 
 const (

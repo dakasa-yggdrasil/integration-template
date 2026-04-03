@@ -1,4 +1,4 @@
-module github.com/dakasa-co/yggdrasil-integration-template
+module github.com/dakasa-yggdrasil/integration-template
 
 go 1.25.0
 

@@ -22,4 +22,4 @@ jobs:
         run: go test ./...
 
       - name: Build image
-        run: docker build -t yggdrasil-integration-template:ci .
+        run: docker build -t integration-template:ci .

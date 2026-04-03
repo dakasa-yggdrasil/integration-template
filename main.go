@@ -11,7 +11,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/dakasa-co/yggdrasil-integration-template/controllers/message"
+	"github.com/dakasa-yggdrasil/integration-template/controllers/message"
 	amqp "github.com/rabbitmq/amqp091-go"
 	"go.uber.org/zap"
 )

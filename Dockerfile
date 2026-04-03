@@ -11,13 +11,13 @@ RUN --mount=type=cache,target=/go/pkg/mod         --mount=type=cache,target=/roo
 
 COPY . .
 
-RUN --mount=type=cache,target=/go/pkg/mod         --mount=type=cache,target=/root/.cache/go-build         go build -o /bin/yggdrasil-integration-template .
+RUN --mount=type=cache,target=/go/pkg/mod         --mount=type=cache,target=/root/.cache/go-build         go build -o /bin/integration-template .
 
 FROM gcr.io/distroless/base-debian12:nonroot
 
 WORKDIR /app
 
-COPY --from=build /bin/yggdrasil-integration-template /app/yggdrasil-integration-template
+COPY --from=build /bin/integration-template /app/integration-template
 
 EXPOSE 8080
-ENTRYPOINT ["/app/yggdrasil-integration-template"]
+ENTRYPOINT ["/app/integration-template"]

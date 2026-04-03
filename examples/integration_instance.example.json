@@ -4,7 +4,7 @@
   "metadata": {
     "name": "template-platform",
     "namespace": "global",
-    "description": "Example integration instance generated from yggdrasil-integration-template."
+    "description": "Example integration instance generated from integration-template."
   },
   "spec": {
     "type_ref": {
