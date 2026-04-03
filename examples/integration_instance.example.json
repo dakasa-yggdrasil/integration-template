@@ -1,0 +1,35 @@
+{
+  "apiVersion": "yggdrasil.io/v1alpha1",
+  "kind": "integration_instance",
+  "metadata": {
+    "name": "template-platform",
+    "namespace": "global",
+    "description": "Example integration instance generated from yggdrasil-integration-template."
+  },
+  "spec": {
+    "type_ref": {
+      "name": "template",
+      "namespace": "global"
+    },
+    "status": "active",
+    "owners": [
+      "team:platform"
+    ],
+    "config": {
+      "default_blueprint": "starter",
+      "default_name": "example-component",
+      "default_namespace": "default",
+      "default_data": {
+        "example": "change-me"
+      }
+    },
+    "discovery": {
+      "enabled": false,
+      "mode": "manual"
+    },
+    "execution": {
+      "default_dry_run": false,
+      "max_batch_size": 10
+    }
+  }
+}

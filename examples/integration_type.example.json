@@ -1,0 +1,109 @@
+{
+  "apiVersion": "yggdrasil.io/v1alpha1",
+  "kind": "integration_type",
+  "metadata": {
+    "name": "template",
+    "namespace": "global",
+    "description": "Example integration type generated from yggdrasil-integration-template.",
+    "labels": {
+      "yggdrasil.io/catalog-domain": "template",
+      "yggdrasil.io/catalog-section": "installations",
+      "yggdrasil.io/catalog-entry": "starter"
+    }
+  },
+  "spec": {
+    "provider": "template",
+    "adapter": {
+      "transport": "rabbitmq",
+      "version": "1.0.0",
+      "queues": {
+        "describe": "yggdrasil.adapter.template.describe",
+        "execute": "yggdrasil.adapter.template.execute"
+      },
+      "timeout_seconds": 20
+    },
+    "capabilities": [
+      "describe",
+      "execute"
+    ],
+    "credential_schema": {
+      "mode": "none"
+    },
+    "instance_schema": {
+      "mode": "inline",
+      "properties": {
+        "default_blueprint": {
+          "type": "string",
+          "default": "starter"
+        },
+        "default_name": {
+          "type": "string",
+          "default": "example-component"
+        },
+        "default_namespace": {
+          "type": "string",
+          "default": "default"
+        }
+      }
+    },
+    "resource_types": [
+      {
+        "name": "component",
+        "canonical_prefix": "thirdparty.template.component",
+        "identity_template": "component.{namespace}.{name}",
+        "discoverable": false,
+        "default_actions": [
+          "generate_installation",
+          "reconcile_installation",
+          "discover_installation_state"
+        ]
+      }
+    ],
+    "action_catalog": [
+      {
+        "name": "generate_installation",
+        "resource_types": [
+          "component"
+        ],
+        "idempotent": true
+      },
+      {
+        "name": "reconcile_installation",
+        "resource_types": [
+          "component"
+        ],
+        "idempotent": true
+      },
+      {
+        "name": "discover_installation_state",
+        "resource_types": [
+          "component"
+        ],
+        "idempotent": true
+      }
+    ],
+    "discovery": {
+      "mode": "push",
+      "cursor": "none"
+    },
+    "normalization": {
+      "external_id_path": "metadata.name",
+      "name_path": "metadata.name",
+      "owner_path": "metadata.namespace",
+      "fallback_resource_prefix": "thirdparty.template.custom"
+    },
+    "execution": {
+      "supports_dry_run": false,
+      "idempotent_actions": [
+        "generate_installation",
+        "reconcile_installation",
+        "discover_installation_state"
+      ]
+    },
+    "extensions": {
+      "allow_custom_resource_types": true,
+      "allow_custom_actions": true,
+      "preserve_raw_payload": true
+    }
+  }
+}
