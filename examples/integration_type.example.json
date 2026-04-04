@@ -26,6 +26,23 @@
       "describe",
       "execute"
     ],
+    "guardian_support": {
+      "mode": "light",
+      "signals": {
+        "error_rate": [
+          "error_rate",
+          "failure_rate"
+        ],
+        "restart_count": [
+          "restart_count",
+          "restarts"
+        ],
+        "sync_lag_seconds": [
+          "sync_lag_seconds",
+          "reconciliation_lag_seconds"
+        ]
+      }
+    },
     "credential_schema": {
       "mode": "none"
     },

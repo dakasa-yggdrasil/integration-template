@@ -29,6 +29,12 @@ live `describe` payload against the public contract, compares it with the stored
 That means provider name, adapter version, queue names, capabilities, resource types, and action
 catalog must stay honest.
 
+Heimdall support also has an explicit lightweight path now. New integrations
+should fill `spec.guardian_support` in their `integration_type` and expose those
+signals in runtime details when they can. If a plugin does not expose
+`guardian_support`, Heimdall can still see generic health, but it does not get
+provider-specific lightweight remediation support for that integration.
+
 This template is intentionally installation-oriented by default. It is the right starting point for
 plugins such as `rabbitmq-on-kubernetes` or `grafana-on-kubernetes`. If you are building a
 runtime/operation plugin such as `rabbitmq`, `grafana`, or another SaaS/API operator, keep the
@@ -161,6 +167,34 @@ When you turn the template into a real plugin, also set the catalog labels in th
 - `yggdrasil.io/catalog-domain`
 - `yggdrasil.io/catalog-section`
 - `yggdrasil.io/catalog-entry`
+
+## Heimdall lightweight support
+
+If you want the plugin to be plug-and-play with Heimdall light mode:
+
+- add `spec.guardian_support.mode` with `light` or `full`
+- map canonical signals in `spec.guardian_support.signals`
+- emit those keys in runtime detail payloads whenever the adapter can observe them
+
+Canonical signals Heimdall understands today:
+
+- `oom_killed`
+- `restart_count`
+- `error_rate`
+- `queue_backlog`
+- `memory_pressure`
+- `disk_pressure`
+- `rate_limited`
+- `auth_denied`
+- `sync_lag_seconds`
+- `monthly_cost_usd`
+- `utilization`
+- `idle_hours`
+- `overprovisioned`
+
+If a future integration omits this section, Heimdall can still fall back to the
+generic health path or the LLM path, but it will not have first-class
+lightweight remediation hints for that provider.
 
 ## Validation
 
