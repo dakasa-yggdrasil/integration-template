@@ -3,6 +3,7 @@ services:
     build:
       context: ${INTEGRATION_TEMPLATE_BUILD_CONTEXT:-.}
       dockerfile: ${INTEGRATION_TEMPLATE_DOCKERFILE:-Dockerfile}
+    restart: unless-stopped
     env_file:
       - .env
     environment:
