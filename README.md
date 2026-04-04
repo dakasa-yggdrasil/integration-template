@@ -14,6 +14,10 @@ This repository also ships the reference GitHub Actions pair for dogfooding:
 - `.github/workflows/emit-deploy-event.yml`
 - `.github/workflows/deploy.yml`
 
+The emit workflow now uses the official GitHub Action
+[`dakasa-yggdrasil/action-emit-workflow-run`](https://github.com/dakasa-yggdrasil/action-emit-workflow-run)
+instead of embedding the HTTP call inline in repository YAML.
+
 On each commit to `main`, `emit-deploy-event.yml` can POST one workflow run
 request into `yggdrasil-core`. The bootstrap workflow
 `global/ecosystem-repository-commit` then dispatches this repository's
