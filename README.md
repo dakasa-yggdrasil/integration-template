@@ -9,6 +9,16 @@ follow the schemas documented in
 [/Users/dakasa/projects/yggdrasil-core/docs/contracts](/Users/dakasa/projects/yggdrasil-core/docs/contracts),
 not import `yggdrasil-core/model` directly.
 
+This repository also ships the reference GitHub Actions pair for dogfooding:
+
+- `.github/workflows/emit-deploy-event.yml`
+- `.github/workflows/deploy.yml`
+
+On each commit to `main`, `emit-deploy-event.yml` can POST one workflow run
+request into `yggdrasil-core`. The bootstrap workflow
+`global/ecosystem-repository-commit` then dispatches this repository's
+`deploy.yml` through the global GitHub integration.
+
 The important architectural rule now is: `describe` is not decorative. The core validates the
 live `describe` payload against the public contract, compares it with the stored
 `integration_type`, and can fast-fail operations when the adapter is in a recent unhealthy state.
@@ -101,6 +111,7 @@ When creating a real plugin from this template, update at least:
 7. `README.md`
 8. files under `examples/`
 9. catalog labels in the example `integration_type`
+10. default component naming in `.github/workflows/*.yml` or the corresponding repository variables
 
 ## Queues in the template
 
@@ -153,6 +164,19 @@ When you turn the template into a real plugin, also set the catalog labels in th
 go mod tidy
 go test ./...
 ```
+
+## GitHub dogfooding configuration
+
+Repository configuration:
+
+- `YGGDRASIL_CORE_BASE_URL` secret: required for commit event emission
+- `YGGDRASIL_WORKFLOW_RUN_TOKEN` secret: optional shared token for `/api/v1/workflow-runs`
+- `YGGDRASIL_WORKFLOW_NAMESPACE` variable: optional, defaults to `global`
+- `YGGDRASIL_WORKFLOW_NAME` variable: optional, defaults to `ecosystem-repository-commit`
+- `YGGDRASIL_DEPLOY_WORKFLOW` variable: optional, defaults to `deploy.yml`
+- `YGGDRASIL_COMPONENT_KIND` variable: optional, defaults to `integration`
+- `YGGDRASIL_COMPONENT_NAME` variable: optional, defaults to the repository name
+- `YGGDRASIL_DEPLOY_ENVIRONMENT` variable: optional, defaults to `production`
 
 ## Example usage
 
