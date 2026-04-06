@@ -191,6 +191,8 @@ Canonical signals Heimdall understands today:
 - `utilization`
 - `idle_hours`
 - `overprovisioned`
+- `scheduling_failure`
+- `insufficient_cpu`
 
 If a future integration omits this section, Heimdall can still fall back to the
 generic health path or the LLM path, but it will not have first-class

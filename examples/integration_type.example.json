@@ -37,6 +37,14 @@
           "restart_count",
           "restarts"
         ],
+        "scheduling_failure": [
+          "scheduling_failure",
+          "failed_scheduling"
+        ],
+        "insufficient_cpu": [
+          "insufficient_cpu",
+          "cpu_exhausted"
+        ],
         "sync_lag_seconds": [
           "sync_lag_seconds",
           "reconciliation_lag_seconds"
