@@ -26,10 +26,27 @@ all started from this template.
 
 ## Use
 
+**Recommended — one command:**
+
+```sh
+yggdrasil new integration my-thing --owner your-org
+```
+
+That clones this template, strips its git history, renames the Go module
+to `github.com/your-org/integration-my-thing`, rewrites every
+`integration-template` reference, and runs `git init` in the result.
+`go test ./...` in the new directory passes out of the box.
+
+Full walkthrough (operations, family manifest, publishing to ghcr.io):
+[**extending guide**](https://github.com/dakasa-yggdrasil/yggdrasil-core/blob/main/docs/extending.md).
+
+### Manual clone (alternative)
+
 ```sh
 gh repo clone dakasa-yggdrasil/integration-template integration-my-thing
 cd integration-my-thing
-# Rename module, declare your family, implement operations
+rm -rf .git && git init
+# Rename the module in go.mod, update imports, implement your operations.
 ```
 
 ## What the template gives you

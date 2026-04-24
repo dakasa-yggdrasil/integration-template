@@ -1,0 +1,147 @@
+# integration_quickstart manifest — consumed by `yggdrasil install`.
+#
+# After you scaffold a new integration with `yggdrasil new integration <name>`,
+# customize the values marked TODO below and push this file to the repo root.
+# Anyone with the yggdrasil CLI can then install your adapter with:
+#
+#   yggdrasil install <owner>/integration-<name> --provider <provider-id>
+#
+# The install flow fetches this file, walks the operator through the
+# declared inputs (TUI by default, --non-interactive for CI), compiles a
+# workflow that deploys the adapter into the target cluster and registers
+# an integration_instance in the core. See docs/extending.md in
+# yggdrasil-core for the full adopter walkthrough.
+apiVersion: yggdrasil.io/v1alpha1
+kind: integration_quickstart
+metadata:
+  name: template
+  namespace: global
+  description: |
+    TODO: replace with a short description of what your adapter does for
+    the adopter. This appears at the top of the TUI.
+
+spec:
+  display_name: "TODO: display name"
+  description: |
+    TODO: longer marketing-friendly description shown during install.
+
+  providers:
+    - id: default
+      display_name: "TODO: provider label"
+      description: |
+        TODO: what this provider does that others don't.
+
+      requires:
+        - kind: integration_family
+          name: kubernetes
+          reason: The adapter pod is deployed via kubernetes/apply_manifest.
+        - kind: cluster_capability
+          capability: kubernetes
+          reason: The adapter runs as a Deployment.
+
+      inputs:
+        - id: instance_name
+          label: integration_instance name
+          type: string
+          required: true
+          default: my-instance
+          validate:
+            regex: ^[a-z][a-z0-9-]*$
+            message: must be lowercase kebab-case
+        - id: namespace
+          label: Yggdrasil instance namespace
+          type: string
+          default: global
+        - id: cluster_namespace
+          label: Kubernetes namespace for the adapter pod
+          type: string
+          default: yggdrasil-adapters
+        - id: image
+          label: Adapter container image
+          type: string
+          # TODO: point this at your published ghcr.io image once CI builds it.
+          default: ghcr.io/your-org/integration-template:latest
+
+      steps:
+        - id: apply-service-account
+          description: ServiceAccount used by the adapter pod.
+          uses:
+            kind: integration
+            family: kubernetes
+            operation: apply_manifest
+          with:
+            manifest:
+              apiVersion: v1
+              kind: ServiceAccount
+              metadata:
+                name: "{{ inputs.instance_name }}"
+                namespace: "{{ inputs.cluster_namespace }}"
+
+        - id: apply-adapter-deployment
+          description: Deploy the adapter pod.
+          uses:
+            kind: integration
+            family: kubernetes
+            operation: apply_manifest
+          with:
+            manifest:
+              apiVersion: apps/v1
+              kind: Deployment
+              metadata:
+                name: "{{ inputs.instance_name }}"
+                namespace: "{{ inputs.cluster_namespace }}"
+              spec:
+                replicas: 1
+                selector:
+                  matchLabels:
+                    app: "{{ inputs.instance_name }}"
+                template:
+                  metadata:
+                    labels:
+                      app: "{{ inputs.instance_name }}"
+                  spec:
+                    serviceAccountName: "{{ inputs.instance_name }}"
+                    containers:
+                      - name: adapter
+                        image: "{{ inputs.image }}"
+                        env:
+                          - name: BROKER_URL
+                            valueFrom:
+                              secretKeyRef:
+                                name: yggdrasil-broker
+                                key: url
+
+        - id: register-instance
+          description: Register the integration_instance with yggdrasil-core.
+          uses:
+            kind: yggdrasil
+            operation: apply_manifest
+          with:
+            manifest:
+              apiVersion: yggdrasil.io/v1alpha1
+              kind: integration_instance
+              metadata:
+                name: "{{ inputs.instance_name }}"
+                namespace: "{{ inputs.namespace }}"
+              spec:
+                # TODO: point this at the integration_type manifest your
+                # integration-family repo publishes.
+                type_ref:
+                  namespace: global
+                  name: template
+
+      smoke_test:
+        description: |
+          TODO: a read-only operation that proves the AMQP round trip
+          works. Something like `describe_*` is usually right.
+        uses:
+          kind: integration
+          family: template
+          operation: describe_installation_state
+        with:
+          blueprint: starter
+        timeout_seconds: 30
+
+      post_install_hints:
+        - "Edit yggdrasil-quickstart.yaml to match your integration's real inputs before cutting a release."
+        - "Replace the `family: template` reference with your actual family name once you register it."
