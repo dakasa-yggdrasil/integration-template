@@ -1,0 +1,80 @@
+# Publish the yggdrasil-quickstart.yaml manifest as an OCI artifact
+# on every release tag. Adopters can then install via:
+#
+#   yggdrasil install oci://ghcr.io/<owner>/<repo>:<tag>
+#
+# The artifact contains exactly one layer (the quickstart YAML) with
+# media type application/vnd.yggdrasil.quickstart.v1+yaml — the CLI
+# picks that layer by preference and falls back to the first layer
+# otherwise.
+#
+# Requirements: the repo has packages:write permission (automatic for
+# workflows running under GITHUB_TOKEN) and the integration author has
+# opted in by enabling the `packages` permission on the repo.
+name: publish-oci
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to publish (defaults to latest release tag)"
+        required: false
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve publish tag
+        id: tag
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+          INPUT_TAG: ${{ github.event.inputs.tag }}
+        run: |
+          if [[ "$EVENT_NAME" == "push" ]]; then
+            value="$GITHUB_REF_NAME"
+          elif [[ -n "$INPUT_TAG" ]]; then
+            value="$INPUT_TAG"
+          else
+            value="latest"
+          fi
+          # Reject anything that isn't an OCI-safe tag. A malicious
+          # workflow_dispatch with a newline or shell metachar would
+          # otherwise flow into later steps.
+          if [[ ! "$value" =~ ^[A-Za-z0-9_.-]+$ ]]; then
+            echo "invalid tag: $value"
+            exit 1
+          fi
+          echo "value=$value" >> "$GITHUB_OUTPUT"
+
+      - name: Install ORAS
+        uses: oras-project/setup-oras@v1
+
+      - name: Log in to GHCR
+        env:
+          GHCR_ACTOR: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: echo "$GHCR_TOKEN" | oras login ghcr.io -u "$GHCR_ACTOR" --password-stdin
+
+      - name: Push quickstart artifact
+        env:
+          OWNER: ${{ github.repository_owner }}
+          REPO: ${{ github.event.repository.name }}
+          TAG: ${{ steps.tag.outputs.value }}
+        run: |
+          owner=$(echo "$OWNER" | tr '[:upper:]' '[:lower:]')
+          repo=$(echo "$REPO" | tr '[:upper:]' '[:lower:]')
+          ref="ghcr.io/${owner}/${repo}:${TAG}"
+          echo "Publishing $ref"
+          oras push "$ref" \
+            --artifact-type application/vnd.yggdrasil.integration.v1+yaml \
+            yggdrasil-quickstart.yaml:application/vnd.yggdrasil.quickstart.v1+yaml
