@@ -18,6 +18,13 @@ jobs:
         with:
           go-version-file: go.mod
 
+      - name: Lint describe contract
+        # Fast smoke that catches manifest drift between SupportedExecuteOperations,
+        # ResourceTypes and ActionCatalog — same drift pattern that bit
+        # integration-aws v1.22.0 and integration-grafana. Runs before
+        # full tests so the signal is immediate.
+        run: go run ./cmd/lint-action-catalog
+
       - name: Test
         run: go test ./...
 
