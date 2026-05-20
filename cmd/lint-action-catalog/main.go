@@ -6,10 +6,14 @@
 // same prevention check is reachable from a CI pipeline step that does
 // not run the full `go test ./...` (faster smoke).
 //
-// Designed to be copied into any integration adapter repo with a
-// one-line import path swap. Future work: when integration-template
-// becomes an importable Go module, replace the embedded import with the
-// shared validator.
+// Designed to be copied into any integration adapter repo. The
+// validation engine lives in the public, importable package
+//
+//	github.com/dakasa-yggdrasil/integration-template/pkg/contractcheck
+//
+// so downstream adapters can `go get` it and add the same prevention
+// without copying code. This binary uses the in-tree adapter package as
+// a convenience for the template itself.
 package main
 
 import (
