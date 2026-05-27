@@ -162,6 +162,46 @@ discover_<resource_type>(scope)         → []resource
 - Pure-function helpers: `verify_signature`, `calculate_<thing>`, `dispatch_workflow`, `merge_pull_request`
 - Money-movement actions: `create_payout`, `create_refund` — even with idempotency key, the semantics are "do this one-shot side effect", not "ensure this resource state"
 
+### §5.b — Response envelope echoes inbound operation name (NON-NEGOTIABLE)
+
+When an adapter receives a request using a legacy operation name that resolves through `LegacyOperationAliases` (or any equivalent compat-shim table) to a canonical handler, the **response envelope MUST echo the inbound (legacy) operation name** — NOT the post-resolution canonical name.
+
+**Rationale**: yggdrasil-core's response-operation-matches-request-operation guard (`controllers/message/integrations.go`, the check `response.Operation != req.Operation`) rejects mismatches as an integrity violation. Echoing the canonical name would cause every legacy-aliased call to fail at the router level — defeating the entire point of the `LegacyOperationAliases` shim. The guard exists so a misrouted response from a different adapter cannot be mistaken for the requested one; it is intentionally strict.
+
+**Wrong** (will fail with `unexpected adapter operation` from core):
+
+```go
+// Adapter receives req.Operation = "describe_workflow_run" (legacy alias).
+// Handler dispatches to the canonical `observe_workflow_run` implementation
+// and returns the canonical name on the envelope — guard rejects.
+return Response{Operation: OperationObserveWorkflowRun, Output: result}  // BAD
+```
+
+**Right**:
+
+```go
+// Adapter captures the inbound name before alias resolution and writes it
+// back onto the response envelope before returning to the caller.
+inbound := req.Operation
+canonical := resolveAlias(inbound)
+resp, err := dispatchByCanonicalOperation(canonical, req)
+if err != nil {
+    return resp, err
+}
+resp.Operation = inbound   // echo inbound name
+resp.Capability = inbound  // same rule for Capability field
+return resp, nil
+```
+
+**Where to put the echo**: Two acceptable shapes.
+
+1. Per-handler: each handler reads `req.Operation` (captured *before* the alias translation) and stamps it onto the response. Brittle — every new handler has to remember.
+2. Centralized at the `Execute()` entry point: `Execute` captures the inbound name, calls a private `dispatchByCanonicalOperation` that knows about canonical names only, then overrides `resp.Operation` and `resp.Capability` with the inbound names before returning. Recommended — one place to maintain.
+
+**Scope**: this rule applies to all four operation categories (`ensure_*`, `observe_*`, `destroy_*`, `discover_*`) plus every action on the allowlist (`verify_signature`, `dispatch_workflow`, `create_payout`, etc.) that passes through aliased names. It applies whether the alias table is in adapter-local Go (this template), in `sdk-go`'s `reconcile.WithLegacyNames`, or in any future framework-level alias registry.
+
+**Discovery context**: this rule was discovered during the `kubernetes` adapter v1.13.0 rename, where a CRUD-style legacy capability (e.g. `delete_secret`) was aliased to its canonical `destroy_secret` handler. The handler echoed `destroy_secret`, the router-level guard saw `response.Operation != req.Operation`, and every legacy-aliased dispatch failed with a 500. Reflected in the cycle 2026-05-27 conformance pass — adapters that still echo canonical-only are subject to the same failure mode the moment a caller still publishes a v1.x name during the deprecation window.
+
 ---
 
 ## 6. Heuristic: Resource vs Action vs Reactor vs Helper
