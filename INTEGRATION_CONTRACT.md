@@ -5,6 +5,71 @@
 
 ---
 
+## 0. ABSOLUTE RULE — Yggdrasil scope vs Backend scope (READ FIRST, NO EXCEPTIONS)
+
+This rule decides whether a given operation belongs in a Yggdrasil integration OR in the operator's backend service. Confusing the two is the #1 architectural mistake AI assistants and human authors make. Always re-read this before designing a new capability or refactoring a backend call.
+
+### The line
+
+**Yggdrasil = Internal Developer Platform (IDP)** — it manages resources that are the operating company's **own internal responsibility**: things the company needs to set up, maintain, and audit so its products and team can operate. Audience: the internal team (collaborators, devops, platform engineers, ops).
+
+**Backend = end-user-facing business** — it runs operations for the company's **end-users** (customers, consumers, clients). Audience: the people who consume the company's product, not the company itself.
+
+### How to tell which side a resource belongs to
+
+Ask: "Whose responsibility is this resource, the COMPANY's or the END-USER's?"
+
+- Company's responsibility → **Yggdrasil integration** territory
+- End-user's responsibility → **Backend** territory
+
+### Concrete examples (Stripe — the easiest case to confuse)
+
+| Operation | Whose concern | Who handles it |
+|---|---|---|
+| Register the Stripe webhook URL on Stripe Dashboard so backend can receive `payment_intent.succeeded` events | The COMPANY (internal infra setup) | **Yggdrasil** via `integration-stripe ensure_webhook_endpoint` |
+| Configure the Stripe API key in the company's secret store | The COMPANY (internal setup) | **Yggdrasil** (via `integration-secrets-management`) |
+| Create the Stripe Connect platform account for the company itself | The COMPANY | **Yggdrasil** via `integration-stripe ensure_connect_account` |
+| Charge end-user U $X for product Y they bought | The END-USER (business transaction) | **Backend** (`enterprise-payments-api` calls Stripe directly) |
+| Create a Stripe customer record for end-user U signing up | The END-USER (their account) | **Backend** |
+| Refund end-user U for order Z | The END-USER (their transaction) | **Backend** |
+| Subscribe end-user U to plan P | The END-USER | **Backend** |
+
+### Concrete examples (other providers)
+
+| Operation | Whose concern | Who handles it |
+|---|---|---|
+| Provision the AWS S3 bucket that hosts the app's static assets | Company infra | **Yggdrasil** via `integration-aws ensure_s3_bucket` |
+| Upload end-user U's profile picture to a bucket | End-user data | **Backend** (calls S3 directly) |
+| Create the GitHub repo for a new team project | Company internal | **Yggdrasil** via `integration-github ensure_repository` |
+| Issue a SaaS user's GitHub-linked OAuth token | End-user identity | **Backend** |
+| Register the EFI Pix webhook URL so backend receives Pix callbacks | Company infra | **Yggdrasil** via `integration-efi ensure_webhook_subscription` |
+| Create a Pix charge for end-user U paying R$100 for product Y | End-user transaction | **Backend** (`dakasa-identities` calls EFI directly) |
+| Configure NFe.io webhook URL for the company's emission events | Company internal | **Yggdrasil** via `integration-nfeio ensure_webhook_subscription` |
+| Emit a NFSe for end-user U's purchase of product Y | End-user business doc | **Backend** (`enterprise-payments-api` calls NFe.io directly) |
+
+### Why this matters
+
+If the rule is violated:
+- **Putting end-user operations in Yggdrasil** → integration becomes a thin wrapper around a provider SDK; loses Crossplane-style declarative value; couples business logic to infra layer; adds latency for every business action.
+- **Putting company-infra ops in the backend** → infra setup gets scattered across business services; no audit trail; no central reconciliation; each backend reinvents webhook registration / secret management.
+
+The line is sharp and the architectural separation is what makes Yggdrasil valuable. **Never blur it.**
+
+### Quick self-test before designing a capability
+
+```
+Question: "If the company changes ownership / sells / shuts down / hands the
+           system to a new operator, does this resource follow the company or
+           the end-user?"
+
+Follows the company → Yggdrasil integration owns it.
+Follows the end-user → Backend owns it.
+```
+
+Example: the Stripe webhook URL endpoint is a company-owned config (it points to the company's backend); it follows the company. The end-user's payment record is theirs (and the company processes it on their behalf); it follows the end-user.
+
+---
+
 ## 1. Definition (single sentence)
 
 > **A Yggdrasil integration is the declarative infrastructure layer that reconciles the state of external resources (third-party APIs, external systems, cloud providers) with the desired state expressed by consumers — guaranteeing idempotency, adoption of pre-existing resources, and drift detection — without ever containing business logic and without assuming any specific cloud, secret store, or storage backend.**

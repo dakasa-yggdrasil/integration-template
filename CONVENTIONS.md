@@ -6,6 +6,12 @@ This file is consumed by **Aider** and other AI coding tools that look for `CONV
 
 **`INTEGRATION_CONTRACT.md`** in the repo root is the canonical law for what a Yggdrasil integration IS / IS NOT. Read it before making any change to this repo or to any adapter cloned from this template.
 
+## ABSOLUTE rule #0 — Yggdrasil scope vs Backend scope
+
+**Yggdrasil = IDP for the operating company's own internal resources** (company concerns: webhook URL setup, infra buckets, repo provisioning, integration configs, audit). **Backend = end-user-facing business operations** (charge user, refund order, emit user's invoice). Heuristic: if the resource follows the COMPANY on ownership change → Yggdrasil. If it follows the END-USER → backend. See contract §0 for full examples.
+
+Example: provisioning the Stripe webhook URL on Stripe Dashboard (so backend can receive `payment_intent.succeeded`) is YGGDRASIL territory — `integration-stripe ensure_webhook_endpoint`. Charging a user is BACKEND territory — `enterprise-payments-api` calls Stripe directly. Both touch Stripe but on opposite sides of the line.
+
 ## Hard rules (one-liners — full text in the contract)
 
 1. Resource ops use the four canonical prefixes: `ensure_<resource>` / `observe_<resource_type>` / `destroy_<resource>` / `discover_<resource_type>`. NEVER `create_*`, `list_*`, `delete_*`, `update_*` for resource operations.

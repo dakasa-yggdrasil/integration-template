@@ -2,6 +2,14 @@
 
 READ FIRST: `INTEGRATION_CONTRACT.md` in the repo root. It is the canonical law defining what a Yggdrasil integration IS / IS NOT, the four canonical capability prefixes, the Lego principle, and the forbidden anti-patterns.
 
+## ABSOLUTE rule #0 — Yggdrasil scope vs Backend scope
+
+Yggdrasil = IDP for the operating COMPANY's own internal resources (Stripe webhook URL config, AWS infra buckets, GitHub repo provisioning, secret management — company concerns). Backend = end-user-facing business operations (charge user, refund order, emit user's NFSe — end-user concerns).
+
+Heuristic: "If the company changes ownership / sells / shuts down, does the resource follow the COMPANY or the END-USER?" Company → Yggdrasil. End-user → backend.
+
+When suggesting a new capability or refactor, ALWAYS first determine which side of the line it's on. Suggesting that a Stripe charge for an end-user go through `integration-stripe` is wrong (that's backend). Suggesting that Stripe webhook URL provisioning go through backend code is wrong (that's Yggdrasil). See contract §0 for the full table.
+
 ## Hard rules (excerpt — full text in `INTEGRATION_CONTRACT.md`)
 
 - Resource ops use the canonical prefixes: `ensure_<resource>` / `observe_<resource_type>` / `destroy_<resource>` / `discover_<resource_type>`. NEVER suggest `create_*`, `list_*`, `delete_*`, `update_*` for resource operations.
