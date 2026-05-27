@@ -1,5 +1,17 @@
+READ FIRST: INTEGRATION_CONTRACT.md in the repo root — the canonical definition of what a Yggdrasil integration IS and the four canonical capability prefixes.
+
+Hard rules (excerpt from INTEGRATION_CONTRACT.md):
+- Resource ops MUST use ensure_<resource> / observe_<resource_type> / destroy_<resource> / discover_<resource_type>. NEVER create_*/list_*/delete_*/update_* for resource operations.
+- Lego principle: NEVER hardcode AWS, GCP, Vault, RabbitMQ, Postgres, or any specific cloud/secret-store/broker/DB. Use abstractions via credentials_ref URI scheme.
+- Integration is infrastructure reconciliation, NOT business logic. No business state, no inbound webhook business processing, no business decisions.
+- Every mutation is idempotent + adopts-if-exists.
+- NEVER log credentials, secrets, signing keys, refresh tokens.
+
 This repository is a standalone Yggdrasil integration worker.
 Keep adapter protocol types local.
 Do not depend on Yggdrasil monorepo internals.
 Keep describe/execute/tests/examples/README aligned in every capability change.
 Preserve graceful shutdown and readiness behavior.
+
+If a planned change leads to create_*/list_*/delete_*/update_* resource op naming → STOP, re-read contract §5 and §10.
+If a planned change hardcodes a specific cloud/secret-store/broker → STOP, re-read contract §2.
