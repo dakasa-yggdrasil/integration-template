@@ -128,6 +128,77 @@ Is it a HELPER?
 
 ---
 
+## 6.5. Golden Rule — Mandatory mutation event emission (NON-NEGOTIABLE)
+
+**Every `ensure_<resource>` and `destroy_<resource>` capability MUST emit a mutation event after the underlying operation succeeds.** No exceptions for resources. The event is what makes the mutation **auditable** (immutable record beyond `workflow_run`) and **reactive** (other adapters and workflows can subscribe to it).
+
+### Event naming convention
+
+```
+<provider>.<resource>.<verb_past>
+
+Examples:
+  efi.charge.ensured
+  efi.charge.destroyed
+  stripe.customer.ensured
+  stripe.subscription.destroyed
+  nfeio.service_invoice.ensured
+  github.repository.ensured
+  github.team_membership.destroyed
+```
+
+The verb is **past tense** (`ensured`, `destroyed`) because the event records a fact that already happened. Reactor capabilities subscribe via `on_<provider>_<resource>_<verb>` matching the inbound pattern already in use.
+
+### Payload schema
+
+```jsonc
+{
+  "event_type":   "stripe.customer.ensured",
+  "provider":     "stripe",
+  "resource":     "customer",
+  "verb":         "ensured",                  // or "destroyed"
+  "resource_id":  "cus_1234abc",              // provider-side stable identity
+  "instance_id":  "stripe-acme",              // integration_instance scope (multi-tenant)
+  "idempotency":  "ensure_customer_acme_abc", // dedup key for re-emissions
+  "observed":     { /* full observed state */ },
+  "emitted_at":   "2026-05-27T10:30:00Z"
+}
+```
+
+### Where the rule comes from
+
+The pattern already exists in Yggdrasil ecosystem for cross-adapter reactivity: when a user is created in Yggdrasil core, a reactor on `integration-github` fires to send the GitHub invite. Mutation event emission **extends this pattern from core-level events to integration-level resource mutations** — so the same reactor mechanism that already handles user-created can now handle `stripe.customer.ensured`, `efi.charge.destroyed`, etc.
+
+### Implementation (SDK v0.6.0+)
+
+Adapter authors do NOT write boilerplate. The SDK `reconcile.RegisterReconciler` wraps `Ensure()` and `Destroy()` to automatically call `events.Emit(ctx, MutationEvent{...})` on success. Adapter authors only provide the `Reconciler[D, O]` interface; emission is mechanical.
+
+```go
+// Adapter author writes (unchanged from v0.5.0):
+reconcile.RegisterReconciler(a, "customer", "customers", customerReconciler)
+
+// Behind the scenes (SDK v0.6.0):
+// - After Ensure() returns success, SDK emits "stripe.customer.ensured"
+// - After Destroy() returns success, SDK emits "stripe.customer.destroyed"
+// - Emission goes through yggdrasil-core HTTP API (auth-gated) → event_log table → MaterializeReactions → reactors fire
+```
+
+### What happens if you don't emit
+
+If an adapter ships an `ensure_*` that does not emit:
+1. The mutation is **silent**: no audit beyond `workflow_run` row.
+2. Cross-adapter reactivity **breaks**: no reactor can subscribe.
+3. Heimdall pulses can't observe the change without polling — wasted infrastructure.
+4. Phase 2 (hard-fail) validator flags the adapter as non-conformant.
+
+This rule is the difference between "I called Stripe's API through a wrapper" and "Yggdrasil reconciled the Stripe resource and the world knows."
+
+### Exemption: read-only and helper capabilities
+
+`observe_*` and `discover_*` do NOT emit (read-only). Pure-function helpers (`verify_signature`, `calculate_iss`) do NOT emit. Reactors (`on_*`) do NOT emit (they consume, they don't mutate). Money-movement actions (`create_payout`, `create_refund` — on allowlist) MUST emit equivalent events using the same convention: `efi.payout.created`, `stripe.refund.created` — `created` instead of `ensured` because they aren't idempotent declarative ops.
+
+---
+
 ## 7. Architectural Layering (where integrations sit)
 
 ```
