@@ -406,7 +406,48 @@ If you answered "YES → wrong layer" to question 1, or any "NO" / "YES → STOP
 
 ---
 
-## 11. References
+## 11. Smoke tests MUST self-clean (NON-NEGOTIABLE)
+
+Every smoke workflow that creates a provider-side resource (Stripe customer, GitHub repo, Slack channel, Grafana folder, etc.) MUST destroy that resource in the SAME workflow run. No exceptions.
+
+**Why**: smoke artifacts that leak accumulate as catalog clutter, billing surprises (Stripe customers), API rate-limit waste, and confused successor maintainers. Every cycle that adds a smoke without cleanup creates a debt that compounds. The 2026-05-27 cycle ended with leftover smoke customers on `stripe-dakasa-validation`, dozens of `smoke-*` / `ad-*` / `adhoc-*` workflow manifests cluttering the catalog, and a `smoke-bridge-v231` Grafana folder hanging around — all of which had to be reaped retroactively.
+
+**Required pattern**:
+
+```yaml
+steps:
+  - id: ensure
+    use: integration: <provider> / capability: ensure_<resource>
+    inputs: { ... }
+
+  - id: observe
+    use: integration: <provider> / capability: observe_<resource_type>
+    inputs: { filter: ... }
+    assert: 1 item matching ensure output
+
+  - id: destroy
+    use: integration: <provider> / capability: destroy_<resource>
+    inputs: { ref: ${{ steps.ensure.metadata.output.id }} }
+    always: true   # ← MUST run even if a prior step failed
+```
+
+**Always-run cleanup**: even if an intermediate step fails, the destroy step MUST execute (`always: true` or whichever equivalent the workflow engine offers). A smoke that creates a resource and then aborts before destroy is the worst kind of leak — undetected until a billing surprise or catalog audit.
+
+**Workflow manifests are smoke artifacts too**: ad-hoc smoke workflows registered in the Yggdrasil catalog (e.g. `smoke-foo-2026-05-27`) MUST be deleted from the catalog after the smoke run completes, OR scheduled for auto-deletion via TTL on the manifest. Cluttering the catalog with leftover smoke workflows is the same anti-pattern as leftover Stripe customers — just at a different layer. Use `integration-yggdrasil-self delete_manifest` (shipped v2.1.0) to delete the manifest from the smoke's own final step.
+
+**Smoke checklist (for reviewers)**:
+
+- [ ] Resource ensured + observed + destroyed in the same run
+- [ ] destroy step uses `always: true` (or workflow-engine equivalent)
+- [ ] Smoke workflow manifest itself is deleted (or marked TTL) after first use
+- [ ] No `test_run=YYYY-MM-DD` tags lingering in provider after run
+- [ ] event_log has both `<provider>.<resource>.ensured` and `<provider>.<resource>.destroyed` rows post-run
+
+**Companion rule on capability authoring**: when you ship a new `ensure_*` capability, ship the paired `destroy_*` capability in the same PR. A new resource type without a destroy is not production-ready — every smoke that exercises the ensure will leak on every run.
+
+---
+
+## 12. References
 
 - Convention spec (full migration tables): `docs/superpowers/specs/2026-05-27-yggdrasil-integration-capability-convention.md` in `dakasa-system`
 - Rollout plan: `docs/superpowers/plans/2026-05-27-yggdrasil-integration-convention-rollout.md`
