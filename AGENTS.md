@@ -1,5 +1,11 @@
 # AGENTS
 
+## 🔐 READ FIRST: `INTEGRATION_CONTRACT.md`
+
+Every AI assistant making changes in this repo or in ANY adapter cloned from this template MUST read [`INTEGRATION_CONTRACT.md`](./INTEGRATION_CONTRACT.md) first. It defines what a Yggdrasil integration IS (and IS NOT), the canonical capability prefixes (`ensure_/observe_/destroy_/discover_`), the **Lego principle** (provider-agnostic — no hardcoded AWS / Vault / RabbitMQ / Postgres), and the forbidden anti-patterns. New capabilities MUST conform; non-conformant names will be flagged by yggdrasil-core's schema validator at registration (warn-only Phase 1, hard-fail Phase 2).
+
+If a user request would lead to a `create_*` / `list_*` / `delete_*` capability for a resource operation, or to hardcoding a specific cloud/secret-store/broker — STOP and revisit the contract before writing code.
+
 ## Repo role
 This repository is a standalone Yggdrasil integration worker. It exposes an honest adapter contract through `describe` and executes capabilities through `execute`.
 

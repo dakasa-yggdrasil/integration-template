@@ -1,5 +1,13 @@
 # Claude Code Context: integration-template
 
+> ## 🔐 READ FIRST: `INTEGRATION_CONTRACT.md`
+>
+> Before doing anything in this repo or in any `dakasa-yggdrasil/integration-*` adapter, read **[`INTEGRATION_CONTRACT.md`](./INTEGRATION_CONTRACT.md)**. That document is the canonical definition of what a Yggdrasil integration IS (and IS NOT), the four capability prefixes (`ensure_/observe_/destroy_/discover_`), the **Lego principle** (no cloud / secret-store / broker / DB coupling — Yggdrasil is provider-agnostic by design), and the forbidden anti-patterns. New adapters and new capabilities MUST conform — yggdrasil-core's schema validator enforces a subset at registration time.
+>
+> If you find yourself naming a capability `create_*`, `list_*`, `delete_*`, `update_*` for a resource operation — STOP and re-read §5 + §10 (self-test checklist).
+>
+> If you find yourself hardcoding "AWS" / "Vault" / "RabbitMQ" / "Postgres" in adapter code — STOP and re-read §2 (Lego principle).
+
 Start with `AGENTS.md` for the rules-of-engagement summary. This file
 expands the context for Claude-style assistants.
 
