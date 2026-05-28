@@ -447,7 +447,150 @@ steps:
 
 ---
 
-## 12. References
+## 12. Backend is the authorization authority (NON-NEGOTIABLE)
+
+Every state-changing HTTP endpoint exposed by yggdrasil-core or any backend integration MUST enforce authorization at the HANDLER level (or in a guard middleware that runs BEFORE the handler). The check MUST verify:
+
+1. **Authenticated principal** — request carries a valid session, workflow run token, or service token. Anonymous requests are rejected with HTTP 401.
+2. **Authorized for the operation** — the principal's effective permissions include the operation being requested. Otherwise HTTP 403.
+3. **Scope match** — for tenant-scoped resources, the principal's tenant matches the resource's tenant. Cross-tenant access requires explicit elevation (admin token).
+
+**Anti-patterns (forbidden)**:
+
+- Routes registered without any middleware (anonymous writes are CRITICAL bugs)
+- Permission checks ONLY in the UI / surface (UI checks are decorative hints, NEVER security)
+- Opt-in auth via `requireXxx` decorators on each route — default-deny middleware wraps EVERY new route
+- Permissions inferred from the request body (e.g., `if body.owner_id == session.user_id` checks performed in handler — should be at the data layer's scope filter)
+
+**Verification rule**: a new route is incomplete until a test exists that submits the request with NO auth header AND expects HTTP 401, AND a test that submits with WRONG-permission auth and expects HTTP 403.
+
+**For surfaces**: the §3.6 "no business decision authority" invariant in `SURFACE_CONTRACT.md` explicitly extends to authorization. Surfaces render based on permission HINTS from the session, but the BACKEND must validate every state change. A surface that shows a "Delete" button does NOT imply the user can delete — only the backend's enforcement determines that.
+
+**Why this clause exists**: 2026-05-27 audit found `POST /api/v1/manifests` and ~10 GET endpoints in production WITHOUT auth — leaking credential paths and customer IDs. Surface had decorative `usePermission` checks that did NOTHING server-side. This clause codifies the lesson permanently.
+
+---
+
+## 13. Session lifecycle is centrally authoritative (NON-NEGOTIABLE)
+
+When a collaborator explicitly logs out, or has their session revoked by an admin, or has their account offboarded, the revocation MUST propagate to EVERY system that has an active delegated session for that collaborator. yggdrasil-core is the authority; consumers MUST honor the revocation in real time (or close to it).
+
+**Three propagation mechanisms** (use the one appropriate for the consumer):
+
+1. **RFC 8417 Back-Channel Logout** — preferred for OIDC clients. yggdrasil-core's OIDC issuer MUST send a signed `logout_token` to each registered client's back-channel logout URL upon session termination. Clients MUST verify the token and invalidate the corresponding local session WITHOUT requiring user interaction.
+
+2. **Mutation event reactor** — for any integration adapter that delegates auth (Slack, Google Workspace, GitHub, Grafana, etc.). The adapter MUST implement a reactor `on_collaborator_session_terminated` (registered in `integration.yaml::reactors[]`). yggdrasil-core emits the event upon session revocation; the reactor's job is to terminate the user's session in the upstream system using the provider's appropriate API.
+
+3. **OIDC token introspection** — fallback for legacy consumers that can't be modified to support 1 or 2. yggdrasil-core MUST expose `/api/v1/oidc/introspect` returning `{active: bool, ...}` per RFC 7662 (OAuth 2.0 Token Introspection). Consumers SHOULD call this on every request (with caching ≤30s) — accepting some staleness in exchange for not requiring back-channel.
+
+**Anti-patterns (forbidden)**:
+
+- Stateless JWTs trusted indefinitely with no revocation lookup (security hole — exactly the bug fixed 2026-05-27 in tartaro)
+- "Logout" handlers that only clear local cookies without informing yggdrasil
+- Per-system logout that doesn't propagate to the IDP
+- `AccessTokenLifetime > 5 minutes` without one of the three mechanisms above
+
+**Where the event fires (yggdrasil-core)**:
+- User clicks "Logout" → DELETE session row → INSERT session_revocation → emit `collaborator.session.terminated` → dispatch RFC 8417 logout_token to OIDC clients + materialize reactor invocations
+- Admin revokes session → same emit
+- Password rotated → same emit (forces re-auth everywhere)
+- Account offboarded → same emit + permanent revocation
+
+**Reactor contract (for adapters)**:
+- Capability name: `on_collaborator_session_terminated`
+- Input: `{collaborator_id, primary_email, reason: "logout"|"revoked"|"password_rotated"|"offboarded", emitted_at}`
+- Behavior: call upstream API to terminate user's session in the integration (e.g., revoke OAuth token, expire SSO session, etc.). MUST be idempotent.
+- Failure mode: log + WARN; do not block other reactors. yggdrasil-core retries via the standard reactor framework.
+
+**Lego principle**: this clause is provider-agnostic. RFC 8417 is an open IETF standard, not vendor-specific. The reactor pattern uses the existing SDK framework. Introspection follows RFC 7662. No specific cloud / IDP vendor required.
+
+**Why this clause exists**: 2026-05-27 audit found that a user could explicitly close their yggdrasil session and STILL log into tartaro via SSO — the tartaro JWT (15-min TTL) was valid until natural expiry. This violates the principle that the IDP is authoritative.
+
+---
+
+## 14. Canonical error response shape (RFC 7807 Problem+JSON)
+
+Every HTTP error response (4xx/5xx) from yggdrasil-core or any backend integration MUST conform to RFC 7807 Problem+JSON:
+
+```json
+{
+  "type": "https://yggdrasil.dakasa.me/errors/auth/invalid-credentials",
+  "title": "Invalid credentials",
+  "status": 401,
+  "detail": "The provided email or password is incorrect.",
+  "code": "auth.invalid_credentials",
+  "instance": "/api/v1/auth/login"
+}
+```
+
+**Required fields**:
+- `code` — stable machine-readable identifier (dotted namespace, e.g. `auth.invalid_credentials`, `manifest.validation_failed`, `permission.denied`). The frontend's i18n table keys off this. NEVER drift the code string.
+- `status` — HTTP status code (redundant with HTTP envelope but required for clients that lose status during proxy chains).
+- `title` — short human description (English, for logs).
+- `detail` — longer description, may include context (still English).
+
+**Optional fields**:
+- `type` — URI to the error documentation (allows machine discoverability).
+- `instance` — the URI of the specific failing operation.
+- Additional context fields (e.g. `field` for validation errors, `locked_until` for rate-limit, `correlation_id`).
+
+**Forbidden** (these were the Frankenstein shapes the 2026-05-27 audit found):
+- `{error: "..."}` — discontinue. Migrate to Problem+JSON with `code`.
+- `{message: "..."}` — same.
+- `{reason: "..."}` — same.
+- Plain text bodies with status codes — replace with Problem+JSON.
+- HTTP 200 with `{error: ...}` in body — emit proper status code.
+
+**i18n strategy**: backend emits English in `title` and `detail`. Surfaces map `code` → localized message via a single per-locale table. No more N independent humanizer regex tables in frontend code.
+
+**Migration**: existing endpoints that emit `{error: "..."}` MUST be migrated; the `code` is added alongside for one minor version, then the legacy field is removed.
+
+**Why this clause exists**: 2026-05-27 co-design audit found 3 different humanizer tables in surfaces (console x2 + tartaro x1), each with ~50 regex rules trying to translate unstructured backend error strings into pt-BR. Backend emits English `err.Error()`; surfaces guess at translation. Stable `code` strings eliminate the guesswork.
+
+---
+
+## 15. Adapter manifests carry UI metadata (drive surfaces from Describe)
+
+When an adapter declares `credential_schema` or `instance_schema` properties, the schema MUST include UI metadata sufficient for any compliant surface to render a usable form WITHOUT per-provider hardcoded knowledge.
+
+**Required per-property fields**:
+
+```yaml
+properties:
+  efi_client_key_id:
+    type: string
+    label: "EFI Client Key ID"
+    label_locale:
+      pt-BR: "EFI: Chave de cliente"
+      en-US: "EFI: Client key"
+    placeholder: "Client_Id_xxxxxxxxxxxx"
+    group: "EFI Credentials"
+    order: 1
+    description: "Find this in EFI Pix dashboard → Settings → API Credentials"
+    description_locale:
+      pt-BR: "Encontre em: EFI Pix dashboard → Configurações → Credenciais API"
+    required: true
+    sensitive: false      # if true, surface renders as password field
+    depends_on:            # optional: only show this when another field has a specific value
+      field: "mtls_enabled"
+      value: true
+```
+
+**Forbidden anti-patterns** (these are the friction the 2026-05-27 audit found in `OpsIntegrationsPage.tsx::fallbackConfigureFields`):
+
+- Surface hardcoding per-provider field knowledge ("if integration_type == 'efi', show fields A, B, C")
+- Surface inferring labels from field names (regex-converting `client_key_id` → "Client Key Id")
+- Surface providing default placeholders that mention specific companies
+- Surface hardcoding field grouping logic per provider
+
+**Surface contract amendment**: surfaces MUST be data-driven from `integration_type` Describe(). The form renderer accepts a schema and produces UI; no per-provider branches.
+
+**Lego principle**: every integration provider has its own field set, but the SHAPE of the metadata is universal. Adding a new provider does NOT require touching surface code — only the adapter's `spec.go` Describe() output.
+
+**Why this clause exists**: 2026-05-27 audit found `OpsIntegrationsPage.tsx` at 2481 LoC because `fallbackConfigureFields()` hardcodes forms for 7 providers. Backend `IntegrationSchemaProperty` lacks `Label`/`Placeholder`/`Group`/`Order`/`DependsOn` — UI compensates with hardcoded knowledge. Extending the schema lets the surface be generic.
+
+---
+
+## 16. References
 
 - Convention spec (full migration tables): `docs/superpowers/specs/2026-05-27-yggdrasil-integration-capability-convention.md` in `dakasa-system`
 - Rollout plan: `docs/superpowers/plans/2026-05-27-yggdrasil-integration-convention-rollout.md`
