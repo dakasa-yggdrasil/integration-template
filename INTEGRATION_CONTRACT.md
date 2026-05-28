@@ -633,7 +633,83 @@ An adapter pod runs **one container** — the adapter binary itself — unless a
 
 ---
 
-## 17. References
+## 17. integration_type.spec.domain + spec.dashboard (adapter self-describes its purpose)
+
+Every integration_type manifest MUST declare a **business-purpose domain** so surfaces can group installed integrations by what they do — not by their transport, registry, or alphabetical name. Lego principle restated: the adapter is the authority on its own purpose; the tenant is the authority on its own taxonomy; the console reflects both.
+
+### 17.1 — `spec.domain` (mandatory invariant)
+
+- **Required**: every `integration_type` MUST declare `spec.domain`.
+- **Shape**: free-form slug matching `^[a-z][a-z0-9_-]*$` (lowercase, starts with a letter; underscores and hyphens allowed). Validator enforces the slug pattern; the value itself is **NOT** a closed enum at the platform level.
+- **Authority on the slug catalog**: tenants — NOT the platform — own the set of slugs that have a presentable label. Each tenant declares its own catalog in `tenant_brand.spec.integration_domain_catalog`. An adapter is free to pick whichever slug fits its purpose; the tenant maps that slug to an overline / title / subtitle / order.
+- **Suggested slugs** (non-binding starter set — the DaKasa tenant uses these as its catalog seed):
+
+  | Slug             | Purpose bucket                                              |
+  |------------------|-------------------------------------------------------------|
+  | `identity`       | Who can enter and where (Slack, GitHub, Google Workspace, Tartaro). |
+  | `payments`       | Money movement and fiscal docs (Stripe, EFI, NFE.io).       |
+  | `observability`  | Dashboards, logs, metrics, alerts (Grafana, Loki, Prometheus, Heimdall). |
+  | `infrastructure` | Cloud compute, secrets, provisioning (Kubernetes, AWS, GCP, secrets-management, kustomize). |
+  | `data`           | Databases, queues, schema migrations (Postgres, RabbitMQ, goose). |
+  | `platform`       | Yggdrasil-internal building blocks (`yggdrasil-self`, `ai-runtime`). |
+
+- **Tenant-defined buckets**: a tenant whose business shape doesn't match this list is encouraged to define its own — `vendas`, `contabilidade`, `suporte`, `compliance`, etc. The validator accepts any slug; only the slug pattern is enforced.
+- **Fallback rendering**: if an adapter declares a slug that has no entry in the active tenant's `integration_domain_catalog`, the surface renders the integration in a trailing **"Outros"** section with the slug humanized (e.g. `vendas` → "Vendas"). Nothing disappears silently.
+- **Phase A (current)**: empty `spec.domain` is accepted by the validator with a warning so in-flight adapters can land their declaration without breaking registration. Consumers fall back to humanizing the slug or to `platform`.
+- **Phase B**: validator hard-fails on empty `spec.domain` (mirrors the 2026-05-27 capability-naming warn→enforce ramp). Target: 14d after the manifest-rollout cycle closes.
+
+### 17.2 — `spec.dashboard` (optional invariant)
+
+Many integrations have a provider-side management UI that lives outside Yggdrasil: Stripe Dashboard, EFI account portal, NFE.io app. When that's the case, the adapter SHOULD declare:
+
+```yaml
+spec:
+  dashboard:
+    url: https://dashboard.stripe.com
+    label: "Abrir Stripe"
+```
+
+- **Mandatory shape when present**: `dashboard.url` is required and MUST be an http(s) URL. `dashboard.label` is optional; consumers default to `"Abrir <provider>"` (translated per tenant locale) when absent.
+- **When to declare**: any integration whose primary management surface lives at the provider, not in Yggdrasil. Examples shipping today: `stripe`, `efi`, `nfeio`.
+- **When NOT to declare**: adapters that ship a federated Yggdrasil surface (`integration-grafana`, `integration-tartaro-dakasa`), or that run purely internal with no human-facing provider UI (`integration-secrets-management-*`).
+- **What the surface does with it**: renders an "Abrir &lt;provider&gt;" CTA on the `/ops/integrations` card so a one-click hop lands the operator on the right page, instead of the operator hunting for the provider URL each time.
+
+### 17.3 — Tenant catalog shape (for context)
+
+`tenant_brand.spec.integration_domain_catalog` is an array of:
+
+```json
+{
+  "slug": "identity",
+  "overline": "Identidade e acesso",
+  "title": "Quem pode entrar e onde",
+  "subtitle": "Sistemas que ligam pessoas, times e canais da empresa.",
+  "order": 10
+}
+```
+
+- `slug` (required, free-form lowercase) — matches the adapter's `spec.domain`.
+- `title` (required) — section heading on the surface.
+- `overline`, `subtitle`, `order` — optional presentation hints. Lower `order` wins; tied/missing values keep declaration order.
+- Validator rejects empty/missing slug, slug not matching the slug pattern, duplicate slugs, empty title.
+
+The catalog is **tenant-owned configuration**, not platform code. New tenants land with an empty catalog and the consumer surfaces fall back to a built-in suggested catalog (the DaKasa seed shown above) until the operator declares their own.
+
+### 17.4 — Why this clause exists
+
+Before this clause, `surface-console/src/pages/ops/OpsIntegrationsPage.tsx` shipped a hand-curated `INTEGRATION_DOMAINS: Record<string, IntegrationDomain>` map listing every adapter the console knew about, plus a closed-enum `IntegrationDomain` union, plus a per-section labels map. Every new adapter triggered a console PR — an explicit Lego violation: the console was the authority on adapter purpose.
+
+This clause inverts the authority:
+
+- **Adapter** declares its own purpose via `spec.domain`.
+- **Tenant** declares its own taxonomy via `tenant_brand.spec.integration_domain_catalog`.
+- **Console** reflects both with zero hardcoded adapter knowledge.
+
+Adding a new adapter requires touching the adapter repo only (one line in its `integration_type.*.yaml`). Switching a tenant from `identity/payments/observability` to `vendas/contabilidade/suporte` requires touching `tenant_brand` only. No console release blocks an integration rollout.
+
+---
+
+## 18. References
 
 - Convention spec (full migration tables): `docs/superpowers/specs/2026-05-27-yggdrasil-integration-capability-convention.md` in `dakasa-system`
 - Rollout plan: `docs/superpowers/plans/2026-05-27-yggdrasil-integration-convention-rollout.md`
