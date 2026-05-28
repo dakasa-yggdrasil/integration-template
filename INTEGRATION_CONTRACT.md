@@ -590,7 +590,29 @@ properties:
 
 ---
 
-## 16. References
+## 16. Adapter Deployment topology — single-container by default (NON-NEGOTIABLE)
+
+An adapter pod runs **one container** — the adapter binary itself — unless a sidecar has a documented purpose **AND** a distinct port topology. This is enforced at the Deployment manifest level: the `spec.template.spec.containers[]` array of the canonical adapter Deployment MUST contain exactly one container named `integration-<provider>` (matching the Deployment name).
+
+**Why this rule exists**: 2026-05-28 close-out cycle found `integration-slack` stuck in a rollout-revert loop because a manually-injected `adapter` sidecar (experimental HTTP bridge from the #243 Option B cycle, never productionized) was sharing port 8080 with the canonical `integration-<provider>` container — both bound to `HEALTHCHECK_PORT`, the second crashed with `bind: address already in use`, Kubernetes never replaced the older single-container ReplicaSet, Phase 2D code never reached production. The Phase 2D fix-and-roll cycle for 5 adapters was blocked by this one mis-configured Deployment.
+
+**Allowed sidecar patterns** (each requires explicit ADR documenting the contract):
+- Adapter + transport bridge (e.g., legacy HTTP→AMQP gateway during a migration). Bridge MUST listen on a distinct port from the main adapter's `HEALTHCHECK_PORT` (default 8080). Bridge MUST have its own readiness/liveness probe targeting its own port. The Deployment MUST emit a single Service with separate `targetPort` values per container.
+- Adapter + auth proxy (e.g., istio-proxy, oauth2-proxy). Same port-distinction rule applies; sidecar must be opt-in via annotation, not the default.
+- Adapter + init container for credential bootstrapping. Init containers are fine because they run to completion before the main container starts and do not bind ports concurrently.
+
+**Anti-patterns (forbidden)**:
+- Two containers, both binding to port 8080 (the canonical `HEALTHCHECK_PORT`). Strategic-merge patch by container name **silently appends** the second container instead of replacing; both crash-loop on the conflict.
+- Manual `kubectl apply` / `kubectl patch` modifications that drift the cluster from the Yggdrasil-managed canonical spec. The runtime monitor's forward-drift detector catches this on the *next* describe handshake, but only after the bad rollout has already broken availability.
+- Mutating an adapter Deployment via `kubectl edit` instead of through a Yggdrasil workflow that uses `apply_manifest` or `ensure_deployment_spec`. There is no audit trail; the field manager registry shows `kubectl` as owner of fields the canonical reconciler should own.
+
+**Where the rule lives**: any Yggdrasil workflow that dispatches `apply_manifest` for an adapter Deployment MUST emit a single-container `template.spec.containers[]` array. The canonical example is the `ad-roll-adapter-with-emission-wire` workflow — its `pod_spec_patch.containers[].name` defaults to `{{ inputs.deployment_name }}`, which IS the canonical single-container name. Operators dispatching this workflow MUST NOT override `container_name` to a value that differs from the Deployment name; doing so triggers the strategic-merge-append anti-pattern.
+
+**Verification**: post-roll, `kubectl -n dakasa get deploy integration-<name> -o jsonpath='{.spec.template.spec.containers[*].name}'` MUST return a single name matching the Deployment.
+
+---
+
+## 17. References
 
 - Convention spec (full migration tables): `docs/superpowers/specs/2026-05-27-yggdrasil-integration-capability-convention.md` in `dakasa-system`
 - Rollout plan: `docs/superpowers/plans/2026-05-27-yggdrasil-integration-convention-rollout.md`
