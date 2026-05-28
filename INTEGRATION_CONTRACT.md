@@ -544,6 +544,27 @@ Every HTTP error response (4xx/5xx) from yggdrasil-core or any backend integrati
 
 **Migration**: existing endpoints that emit `{error: "..."}` MUST be migrated; the `code` is added alongside for one minor version, then the legacy field is removed.
 
+**Migration status (yggdrasil-core, 2026-05-28)**:
+
+| Phase | Scope | Status |
+|-------|-------|--------|
+| 2B-core | Universal `writeMappedError` / `writeJSONError` writers | DONE — every typed-error path goes through `internal/httperr.WriteProblem` |
+| 2B-close | Hand-rolled `writeJSON(w, status, map[string]any{...,"code":...})` sites in auth/MFA/password handlers | **DONE 2026-05-28** — 25 sites migrated; new dotted codes shipped (auth.mfa_invalid, auth.password_too_weak, auth.invalid_current_password, auth.setup_token_invalid, auth.reset_token_invalid, auth.kek_not_configured, auth.webauthn_not_implemented, auth.mfa_factor_unavailable, auth.password_unchanged, auth.password_change_required, input.unknown_fields) |
+| 2B-pending | `{error: "..."}` sites in invites / saml / scim_admin / integration_webhook / workflow_runs / external_identities / team_sync / tartaro_actions / integration_type_sync | Pending — flagged warn-only by the lint rule |
+| 2C | Removal of legacy `error` key | After one-minor deprecation window |
+
+**Regression guard** (yggdrasil-core `scripts/lint-no-legacy-error-envelopes.sh`):
+
+```bash
+# Forbidden: writeJSON(w, 4xx/5xx, map[string]{...}) — hand-rolled
+# error envelope. Use httperr.WriteProblem(w, status, code, title, detail, opts...)
+git diff --name-only origin/main...HEAD -- 'controllers/httpapi/*.go' \
+  | xargs grep -nE 'writeJSON\(.*http\.Status(BadRequest|Unauthorized|Forbidden|NotFound|Conflict|UnprocessableEntity|Locked|TooManyRequests|PreconditionRequired|NotImplemented|ServiceUnavailable|InternalServerError).*map\[string\]' \
+  && { echo "::error::§14 violation"; exit 1; } || true
+```
+
+Files already migrated are hard-fail; pending files emit warnings only. Adding a new closed file extends the `CLOSED_FILES` array in the lint script.
+
 **Why this clause exists**: 2026-05-27 co-design audit found 3 different humanizer tables in surfaces (console x2 + tartaro x1), each with ~50 regex rules trying to translate unstructured backend error strings into pt-BR. Backend emits English `err.Error()`; surfaces guess at translation. Stable `code` strings eliminate the guesswork.
 
 ---
