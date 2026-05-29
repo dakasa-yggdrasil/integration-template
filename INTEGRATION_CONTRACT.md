@@ -573,41 +573,100 @@ Files already migrated are hard-fail; pending files emit warnings only. Adding a
 
 When an adapter declares `credential_schema` or `instance_schema` properties, the schema MUST include UI metadata sufficient for any compliant surface to render a usable form WITHOUT per-provider hardcoded knowledge.
 
-**Required per-property fields**:
+### 15.1 — `spec.display` and `spec.icon` (mandatory)
+
+Every `integration_type` manifest MUST declare:
+
+```yaml
+spec:
+  display:
+    subtitle: "Pagamentos, clientes, assinaturas e webhooks via Stripe."
+    subtitle_locale:
+      pt-BR: "Pagamentos, clientes, assinaturas e webhooks via Stripe."
+      en-US: "Payments, customers, subscriptions, and webhooks via Stripe."
+  icon:
+    url: "data:image/svg+xml;utf8,<svg ...>"   # data:, https://, or relative /path
+    accent: "#635bff"                          # #RRGGBB hex; drives card chrome
+    aria_label: "Stripe"                       # optional, defaults to provider
+```
+
+- `display.subtitle` (or at least one `display.subtitle_locale[]` entry) — one-line role description shown under the integration name on `/ops/integrations` cards, drawers, and pickers. The adapter is the authority on its own one-liner; surfaces MUST NOT have an `if normalized.includes("stripe")` switch that synthesizes role copy.
+- `display.subtitle_locale` keys are BCP-47 tags (`pt-BR`, `en-US`, `es`, …). Validator pattern: `^[a-z]{2}(-[A-Z]{2})?$`.
+- `icon.url` — visual mark. Prefer inline `data:` URI (no external CDN dependency); `https://` and absolute `/path` references are also accepted. Validator rejects other schemes.
+- `icon.accent` — `#RRGGBB` hex color the surface paints on card chrome, status pills, and focus rings. Validator pattern: `^#[0-9A-Fa-f]{6}$`. Optional but recommended.
+- `icon.aria_label` — accessible name override; defaults to the provider name when absent.
+
+**Phase A**: omission emits a validator warning but does not block registration (in-flight adapters can land it without a hard cut-off).
+
+**Phase B (future)**: validator hard-fails on missing `display.subtitle` and missing `icon.url`. Target: 14d after every catalogued adapter ships these fields. Surfaces MUST consume `spec.display` and `spec.icon` verbatim — no per-provider lookups, no synthesized accents, no static brand-component imports.
+
+### 15.2 — Required per-property metadata (`credential_schema` + `instance_schema`)
+
+Every property declared in either schema MUST ship:
 
 ```yaml
 properties:
   efi_client_key_id:
     type: string
-    label: "EFI Client Key ID"
-    label_locale:
+    label: "EFI Client Key ID"                 # required
+    label_locale:                              # required when serving multiple locales
       pt-BR: "EFI: Chave de cliente"
       en-US: "EFI: Client key"
-    placeholder: "Client_Id_xxxxxxxxxxxx"
-    group: "EFI Credentials"
-    order: 1
-    description: "Find this in EFI Pix dashboard → Settings → API Credentials"
+    placeholder: "Client_Id_xxxxxxxxxxxx"      # required (placeholder_locale optional)
+    description: "Find in EFI Pix → Settings → API"  # required
     description_locale:
-      pt-BR: "Encontre em: EFI Pix dashboard → Configurações → Credenciais API"
-    required: true
-    sensitive: false      # if true, surface renders as password field
-    depends_on:            # optional: only show this when another field has a specific value
+      pt-BR: "Encontre em: EFI Pix → Configurações → API"
+    group: "EFI Credentials"                   # optional
+    order: 1                                   # optional
+    sensitive: false                           # if true, render as password
+    depends_on:
       field: "mtls_enabled"
       value: true
+    enum_descriptions:                         # required when `enum` is present
+      pat:                 "Personal Access Token"
+      github_app:          "GitHub App (single org)"
+      github_app_enterprise: "GitHub App Enterprise"
+    enum_descriptions_locale:                  # optional per-locale override
+      pt-BR:
+        pat:                 "Token pessoal"
+        github_app:          "App do GitHub"
+        github_app_enterprise: "App do GitHub Enterprise"
 ```
 
-**Forbidden anti-patterns** (these are the friction the 2026-05-27 audit found in `OpsIntegrationsPage.tsx::fallbackConfigureFields`):
+- `label` + `label_locale` — surfaces fall back to `label` then humanized property key. Never invent labels via regex at the surface.
+- `placeholder` — surfaces render verbatim inside the input. Surface MUST NOT synthesize placeholders per provider.
+- `description` + `description_locale` — short help text under the input.
+- `enum_descriptions` — when the property declares an `enum`, this map (value → human label) replaces per-surface `OPTION_LABELS` tables. **Mandatory** when `enum` is non-empty.
+- `enum_descriptions_locale` — per-locale override; outer key is BCP-47 tag, inner map mirrors `enum_descriptions`.
 
-- Surface hardcoding per-provider field knowledge ("if integration_type == 'efi', show fields A, B, C")
-- Surface inferring labels from field names (regex-converting `client_key_id` → "Client Key Id")
-- Surface providing default placeholders that mention specific companies
-- Surface hardcoding field grouping logic per provider
+### 15.3 — Adapters declare permissions; surfaces do not invent them
 
-**Surface contract amendment**: surfaces MUST be data-driven from `integration_type` Describe(). The form renderer accepts a schema and produces UI; no per-provider branches.
+`surface_manifest.permissions[]` is the **source of truth** for the per-surface permission catalog. Consumers MUST NOT hardcode fallback per-provider permission ids (no synthesized `<provider>.observe.read`, no inline `if provider == "github" then [...]`). When `permissions[]` is empty the surface renders a "no permissions declared" notice instead of inventing rows.
 
-**Lego principle**: every integration provider has its own field set, but the SHAPE of the metadata is universal. Adding a new provider does NOT require touching surface code — only the adapter's `spec.go` Describe() output.
+### 15.4 — Surfaces consume the schema verbatim (NO field renaming)
 
-**Why this clause exists**: 2026-05-27 audit found `OpsIntegrationsPage.tsx` at 2481 LoC because `fallbackConfigureFields()` hardcodes forms for 7 providers. Backend `IntegrationSchemaProperty` lacks `Label`/`Placeholder`/`Group`/`Order`/`DependsOn` — UI compensates with hardcoded knowledge. Extending the schema lets the surface be generic.
+Surfaces MUST treat `spec.credential_schema.properties[X]` and `spec.instance_schema.properties[X]` as authoritative. The console (or any other surface) MUST NOT rename `field.field` at render time, regardless of motivation. If a property's source name needs to change, the **adapter** renames it in its schema and bumps adapter version; the surface accepts it verbatim. This was the gravest violation found in the 2026-05-28 anti-Lego audit (`OpsIntegrationsPage::normalizeConfigureFieldForSurface` rewriting `base_url` → `prometheus_url`, etc.).
+
+### 15.5 — Forbidden anti-patterns
+
+- Surface hardcoding per-provider field knowledge ("if integration_type == 'efi', show fields A, B, C").
+- Surface inferring labels from field names (regex-converting `client_key_id` → "Client Key Id").
+- Surface providing default placeholders that mention specific companies.
+- Surface hardcoding field grouping logic per provider.
+- Surface providing fallback permission catalogs synthesized from provider name.
+- Surface renaming `field.field` (see §15.4).
+- Surface lookups of brand logos / accents from a per-provider component map.
+
+### 15.6 — Lego principle restated
+
+Every integration provider has its own field set, accent, icon, role copy, enum value labels, and permission catalog — but the SHAPE of the metadata is universal. Adding a new provider requires touching only the adapter repo (`integration_type.<name>.yaml` plus its `spec.go`). Surfaces upgrade automatically when they next read the manifest.
+
+### 15.7 — Why this clause exists (extended)
+
+- 2026-05-27 audit: `OpsIntegrationsPage.tsx::fallbackConfigureFields` hardcoded forms for 7 providers (2481 LoC blob).
+- 2026-05-28 audit: same file at 3171 LoC. The `surfaceVisualMeta()` cascade had 8× `includes("X")` switches mapping provider → accent / brand component / role copy. `fieldEnhancementsForSurface()` routed 6 buckets (github/google/slack/observability/secrets/default). `normalizeConfigureFieldForSurface()` rewrote 3 backend field names at render time. `fallbackGovernancePermissions()` synthesized permission catalogs for github/google/slack from provider name. `LEGACY_EXTERNAL_DASHBOARDS` hardcoded Stripe/EFI/NFE.io URLs. All of it: §15 metadata that belongs in the adapter manifest.
+
+The 2026-05-28 §15 amplification (`spec.display`, `spec.icon`, mandatory `enum_descriptions`, surface-must-not-rename-fields) closes the structural gap.
 
 ---
 
